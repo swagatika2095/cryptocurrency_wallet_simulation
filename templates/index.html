@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cryptocurrency Wallet & Blockchain Engine</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🪙 Crypto Wallet & PoW Blockchain Engine</h1>
+
+        <!-- Wallet Management -->
+        <section class="card">
+            <h2>1. Wallet Management</h2>
+            <button id="create-wallet-btn">Generate ECDSA Wallet Pair</button>
+            <div id="wallet-details" class="hidden">
+                <p><strong>Address:</strong> <span id="wallet-addr"></span></p>
+                <p><strong>Private Key:</strong> <span id="wallet-priv"></span></p>
+                <p><strong>Balance:</strong> <span id="wallet-bal">0</span> SIM Coins</p>
+                <button id="faucet-btn">Request 100 Test Coins (To Mempool)</button>
+            </div>
+        </section>
+
+        <!-- Send Signed Transaction -->
+        <section class="card">
+            <h2>2. Create & Sign Transaction</h2>
+            <form id="tx-form">
+                <input type="text" id="recipient-addr" placeholder="Recipient Address" required />
+                <input type="number" id="tx-amount" step="0.1" placeholder="Amount" required />
+                <button type="submit">Sign & Broadcast Transaction</button>
+            </form>
+            <p id="tx-status"></p>
+        </section>
+
+        <!-- Mine Pending Transactions -->
+        <section class="card">
+            <h2>3. Proof of Work Mining</h2>
+            <p>Pending Mempool Transactions: <strong id="mempool-count">0</strong></p>
+            <button id="mine-btn">Mine Block (Solve Hash Puzzle)</button>
+            <p id="mine-status"></p>
+        </section>
+
+        <!-- Security & Tamper Simulation -->
+        <section class="card attack-card">
+            <h2>4. Security & Tamper Verification</h2>
+            <p>Status: <strong id="chain-status">Checking...</strong></p>
+            <button id="tamper-btn" class="danger-btn">Simulate Data Tamper Attack ⚠️</button>
+            <button id="refresh-chain">Refresh Ledger</button>
+        </section>
+
+        <!-- Blockchain Explorer -->
+        <section class="card">
+            <h2>5. Blockchain Explorer</h2>
+            <div id="blockchain-display"></div>
+        </section>
+    </div>
+
+    <script>
+        let currentWallet = null;
+
+        document.getElementById('create-wallet-btn').addEventListener('click', async () => {
+            const res = await fetch('/api/wallet/create', { method: 'POST' });
+            currentWallet = await res.json();
+            document.getElementById('wallet-addr').innerText = currentWallet.address;
+            document.getElementById('wallet-priv').innerText = currentWallet.private_key;
+            document.getElementById('wallet-details').classList.remove('hidden');
+            updateUI();
+        });
+
+        document.getElementById('faucet-btn').addEventListener('click', async () => {
+            if (!currentWallet) return;
+            await fetch('/api/faucet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: currentWallet.address })
+            });
+            updateUI();
+        });
+
+        document.getElementById('tx-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentWallet) return alert("Create a wallet first!");
+
+            const recipient = document.getElementById('recipient-addr').value;
+            const amount = document.getElementById('tx-amount').value;
+
+            const res = await fetch('/api/transaction/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sender: currentWallet.address,
+                    recipient: recipient,
+                    amount: parseFloat(amount)
+                })
+            });
+
+            const data = await res.json();
+            const statusElem = document.getElementById('tx-status');
+            statusElem.innerText = data.message;
+            statusElem.style.color = data.status === 'success' ? '#4ade80' : '#f87171';
+            updateUI();
+        });
+
+        document.getElementById('mine-btn').addEventListener('click', async () => {
+            if (!currentWallet) return alert("Create a wallet to receive mining rewards!");
+            document.getElementById('mine-status').innerText = "Mining in progress... solving Proof of Work...";
+
+            const res = await fetch('/api/mine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ miner_address: currentWallet.address })
+            });
+            const data = await res.json();
+            document.getElementById('mine-status').innerText = data.message;
+            updateUI();
+        });
+
+        document.getElementById('tamper-btn').addEventListener('click', async () => {
+            const res = await fetch('/api/tamper', { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+            updateUI();
+        });
+
+        document.getElementById('refresh-chain').addEventListener('click', updateUI);
+
+        async function updateUI() {
+            if (currentWallet) {
+                const balRes = await fetch(`/api/wallet/balance/${currentWallet.address}`);
+                const balData = await balRes.json();
+                document.getElementById('wallet-bal').innerText = balData.balance;
+            }
+
+            const chainRes = await fetch('/api/chain');
+            const chainData = await chainRes.json();
+
+            document.getElementById('mempool-count').innerText = chainData.mempool.length;
+
+            const statusElem = document.getElementById('chain-status');
+            statusElem.innerText = chainData.validation_message;
+            statusElem.style.color = chainData.is_valid ? '#4ade80' : '#f87171';
+
+            // Render Blockchain Blocks
+            const display = document.getElementById('blockchain-display');
+            display.innerHTML = '';
+
+            chainData.chain.forEach(b => {
+                display.innerHTML += `
+                    <div class="block-card">
+                        <h3>Block #${b.index}</h3>
+                        <p><strong>Hash:</strong> <small>${b.hash}</small></p>
+                        <p><strong>Prev Hash:</strong> <small>${b.previous_hash}</small></p>
+                        <p><strong>Nonce:</strong> ${b.nonce}</p>
+                        <p><strong>Transactions (${b.transactions.length}):</strong></p>
+                        <pre>${JSON.stringify(b.transactions, null, 2)}</pre>
+                    </div>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>
