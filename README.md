@@ -139,3 +139,4 @@ http://127.0.0.1:5000
 ## 📜 License
 
 Distributed under the **MIT License**. Intended for educational and demonstration purposes.
+# cryptocurrency_wallet_simulation
